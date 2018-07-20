@@ -1,3 +1,15 @@
+python-cryptography (2.1.4-1ubuntu1.2) bionic-security; urgency=medium
+
+  * SECURITY UPDATE: GCM disallow implicit tag truncation
+    - debian/patches/CVE-2018-10903.patch: fix in
+      docs/hazmat/primitives/symmetric-encryption.rst,
+      src/cryptography/hazmat/backends/openssl/ciphers.py,
+      src/cryptography/hazmat/primitives/ciphers/modes.py,
+      tests/hazmat/primitives/test_aes.py.
+    - CVE-2018-10903
+
+ -- Leonidas S. Barbosa <leo.barbosa@canonical.com>  Fri, 20 Jul 2018 11:09:59 -0300
+
 python-cryptography (2.1.4-1ubuntu1.1) bionic; urgency=medium
 
   * d/control: Reverted addition of python-cffi as it is not apparently
