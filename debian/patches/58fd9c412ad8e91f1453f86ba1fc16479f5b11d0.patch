@@ -1,0 +1,98 @@
+From 58fd9c412ad8e91f1453f86ba1fc16479f5b11d0 Mon Sep 17 00:00:00 2001
+From: Alex Gaynor <alex.gaynor@gmail.com>
+Date: Wed, 20 Jun 2018 08:50:33 -0700
+Subject: [PATCH] Perform an OPENSSL_cleanup before checking the heap in our
+ memleak tests (#4293)
+
+* Perform an OPENSSL_cleanup before checking the heap in our memleak tests
+
+* Make this binding conditional
+
+* typo
+
+* need to put this call before we reset the function ptrs
+---
+ src/_cffi_src/openssl/crypto.py                          | 9 ++++++++-
+ src/cryptography/hazmat/bindings/openssl/_conditional.py | 7 +++++++
+ tests/hazmat/backends/test_openssl_memleak.py            | 3 +++
+ 3 files changed, 18 insertions(+), 1 deletion(-)
+
+Index: python-cryptography-2.1.4/src/_cffi_src/openssl/crypto.py
+===================================================================
+--- python-cryptography-2.1.4.orig/src/_cffi_src/openssl/crypto.py
++++ python-cryptography-2.1.4/src/_cffi_src/openssl/crypto.py
+@@ -11,6 +11,7 @@ INCLUDES = """
+ TYPES = """
+ static const long Cryptography_HAS_LOCKING_CALLBACKS;
+ static const long Cryptography_HAS_MEM_FUNCTIONS;
++static const long Cryptography_HAS_OPENSSL_CLEANUP;
+ 
+ static const int SSLEAY_VERSION;
+ static const int SSLEAY_CFLAGS;
+@@ -34,8 +35,9 @@ static const int CRYPTO_LOCK_SSL;
+ 
+ FUNCTIONS = """
+ int CRYPTO_mem_ctrl(int);
+-/* CRYPTO_cleanup_all_ex_data became a macro in 1.1.0 */
++
+ void CRYPTO_cleanup_all_ex_data(void);
++void OPENSSL_cleanup(void);
+ 
+ /* as of 1.1.0 OpenSSL does its own locking *angelic chorus*. These functions
+    have become macros that are no ops */
+@@ -112,6 +114,10 @@ void (*CRYPTO_lock)(int, int, const char
+ #endif
+ 
+ #if CRYPTOGRAPHY_OPENSSL_LESS_THAN_110
++static const long Cryptography_HAS_OPENSSL_CLEANUP = 0;
++
++void (*OPENSSL_cleanup)(void) = NULL;
++
+ /* This function has a significantly different signature pre-1.1.0. since it is
+  * for testing only, we don't bother to expose it on older OpenSSLs.
+  */
+@@ -122,6 +128,7 @@ int (*Cryptography_CRYPTO_set_mem_functi
+     void (*)(void *, const char *, int)) = NULL;
+ 
+ #else
++static const long Cryptography_HAS_OPENSSL_CLEANUP = 1;
+ static const long Cryptography_HAS_MEM_FUNCTIONS = 1;
+ 
+ int Cryptography_CRYPTO_set_mem_functions(
+Index: python-cryptography-2.1.4/src/cryptography/hazmat/bindings/openssl/_conditional.py
+===================================================================
+--- python-cryptography-2.1.4.orig/src/cryptography/hazmat/bindings/openssl/_conditional.py
++++ python-cryptography-2.1.4/src/cryptography/hazmat/bindings/openssl/_conditional.py
+@@ -250,6 +250,12 @@ def cryptography_has_fips():
+     ]
+ 
+ 
++def cryptography_has_openssl_cleanup():
++    return [
++        "OPENSSL_cleanup",
++    ]
++
++
+ # This is a mapping of
+ # {condition: function-returning-names-dependent-on-that-condition} so we can
+ # loop over them and delete unsupported names at runtime. It will be removed
+@@ -300,4 +306,5 @@ CONDITIONAL_NAMES = {
+         cryptography_has_evp_pkey_get_set_tls_encodedpoint
+     ),
+     "Cryptography_HAS_FIPS": cryptography_has_fips,
++    "Cryptography_HAS_OPENSSL_CLEANUP": cryptography_has_openssl_cleanup,
+ }
+Index: python-cryptography-2.1.4/tests/hazmat/backends/test_openssl_memleak.py
+===================================================================
+--- python-cryptography-2.1.4.orig/tests/hazmat/backends/test_openssl_memleak.py
++++ python-cryptography-2.1.4/tests/hazmat/backends/test_openssl_memleak.py
+@@ -60,6 +60,9 @@ def main(argv):
+     gc.collect()
+     gc.collect()
+ 
++    if lib.Cryptography_HAS_OPENSSL_CLEANUP:
++        lib.OPENSSL_cleanup()
++
+     # Swap back to the original functions so that if OpenSSL tries to free
+     # something from its atexit handle it won't be going through a Python
+     # function, which will be deallocated when this function returns
